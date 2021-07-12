@@ -1,0 +1,29 @@
+---
+title: "Trends in solar power generation"
+output: html_notebook
+---
+
+Project description 
+
+```{r results = FALSE, warning = FALSE, fig.width = 10, fig.height = 5}
+library(tidyverse)
+library(ggrepel)
+library(lubridate)
+
+solartrendsdf <- read.csv("../solar_trends.csv")
+
+solartrendsdf <- solartrendsdf %>%
+  mutate(Highlight = ifelse(State == "CA" | State == "NC" | State == "TX" | State == "NV" | State == "FL", State, NA),
+         Date = parse_date_time(Date, orders = "Ymd"))
+
+ggplot(data = solartrendsdf) + 
+  geom_line(aes(Date, kMWh, group = State, color = Highlight, size = !is.na(Highlight), alpha = !is.na(Highlight))) +
+  geom_label_repel(data = solartrendsdf %>% filter(!is.na(kMWh)) %>% filter(Date == last(Date), !is.na(Highlight)), aes(Date, kMWh, label = Highlight), nudge_x = 1e7, na.rm = TRUE) + 
+  scale_size_manual(values=c(0.5, 1.5), guide = 'none') +
+  scale_alpha_manual(values=c(0.5, 1), guide = 'none') + 
+  guides(color = FALSE) +
+  xlab("Year") +
+  ylab("Power generated (kMWh)") +
+  ggtitle("State-level trends in solar power generation")
+
+```
