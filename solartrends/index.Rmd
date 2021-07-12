@@ -3,7 +3,7 @@ title: "Trends in solar power generation"
 output: html_notebook
 ---
 
-Project description 
+Solar power generation has a strong seasonal component, dipping during the winter and peaking during the summer, which can obscure growth in solar power. This plot shows the growth trends by state in solar energy (kMWh of generated power), decomposed from the seasonal component of the time series. These data were gathered from the EIA-923 reports on plant-level power generation. Five states are highlighted as interesting examples of growth trends.
 
 ```{r results = FALSE, warning = FALSE, fig.width = 10, fig.height = 5}
 library(tidyverse)
@@ -27,3 +27,5 @@ ggplot(data = solartrendsdf) +
   ggtitle("State-level trends in solar power generation")
 
 ```
+
+California is the clear outlier, having heavily invested early in clean energy and continuing to expand its capacity. North Carolina and Nevada present a good opportunity for a policy case study: their initial growth was very similar, but North Carolina has continued to expand its solar power generation while Nevada has plateaued over the past few years. Florida and Texas have only recently begun to expand their solar power generation capacity, and they are both in zones of high solar radiation, making them prime targets for investment. 
