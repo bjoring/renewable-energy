@@ -1,11 +1,11 @@
 ---
-title: "Renewable power usage"
+title: "Renewable power capacity"
 output: html_notebook
 ---
 
-Description of plot 
+Based on EIA-860 data from 2019, this map shows the locations and capacities of power plants using solar- and wind-based power. The size of the circle shows the generator nameplate capacity, and the color indicates power-type (solar: gold; wind: gray). The location of the generators is derived from geographic coordinates provided by utility reporting. 
 
-```{r results = FALSE, warning = FALSE, fig.width = 16, fig.height = 8}
+```{r results = FALSE, warning = FALSE, fig.width = 12, fig.height = 6}
 library(tidyverse)
 library(ggmap)
 library(maps)
@@ -28,3 +28,5 @@ ggplot() +
   ggtitle("Distribution of wind (gray) and solar (gold) power plants in the contiguous United States")
 
 ```
+
+The map shows clear regional differences in clean energy types, with only a few cities in California showing significant investment in both types of energy. Correlation of these data with wind pattern data may explain some of the differences, especially through the center of the country, but stark differences between contiguous states, such as Minnesota/Iowa, Virginia/North Carolina, and Massachusetts/Connecticut suggest the impact of local policy initiatives on clean energy investment.
