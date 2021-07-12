@@ -8,6 +8,7 @@ library(zoo)
 library(xts)
 library(ggrepel)
 
+#List of years with completed data
 years <- c(2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019)
 
 # EIA 923 Energy generation data
@@ -82,13 +83,16 @@ solar19 %>%
   summarize(summercap = mean(`Summer Capacity (MW)`, na.rm = TRUE),
             wintercap = mean(`Winter Capacity (MW)`, na.rm = TRUE))
 
+# Join plant-level data to solar data to allow geospatial localization of power plants
 solar19loc <- left_join(solar19, plant19, by="Plant Code")
+
+# Save a tidy version of this data
 write.csv(solar19loc, 'solar_locations_2019.csv')
 
 solar19 %>% ggplot() +
   geom_point(aes(x = `Nameplate Capacity (MW)`, y = `Summer Capacity (MW)`))
 
-usa <- map_data("usa")
+# Location and capacity of solar plants in the continguous USA
 states <- map_data("state")
 ggplot() + 
   geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = "white") +
@@ -100,8 +104,10 @@ ggplot() +
 wind19 <- read_excel("EIA860/EIA860_2019/3_2_Wind_Y2019.xlsx", skip = 1)
 wind19loc <- left_join(wind19, plant19, by="Plant Code")
 
+# Save a tidy version of this data
 write.csv(wind19loc, 'wind_locations_2019.csv')
 
+# Map with both wind and solar -- some interesting spatial trends appearing
 states <- map_data("states")
 ggplot() + 
   geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = "white") +
@@ -115,13 +121,12 @@ ggplot() +
 
 fps <- list.files(path = "EIA923", pattern = "Schedules_2", recursive = TRUE, full.names = TRUE)
 
-#Bind all EIA923 years into a single table
+# Bind all EIA923 years into a single table
 utility_gen <- read_excel(fps[1], sheet = 1, skip = 5, na = ".")
 colnames(utility_gen) <- str_replace_all(colnames(utility_gen), "\\r\\n", " ")
 utility_gen <- utility_gen %>%
   select(c(`Plant Id`, `Plant Name`, `Operator Name`, `Operator Id`, contains("State"), contains("Fuel Type"), YEAR, starts_with("Netgen")))
 std_names <- colnames(utility_gen)
-
 for (fp in tail(fps,length(fps)-1)) {
   utility_gen_year <- read_excel(fp, sheet = 1, skip = 5, na = ".") %>%
     select(c(`Plant Id`, `Plant Name`, `Operator Name`, `Operator Id`, contains("State"), contains("Fuel Type"), YEAR, starts_with("Netgen")))
@@ -130,21 +135,25 @@ for (fp in tail(fps,length(fps)-1)) {
   utility_gen <- bind_rows(utility_gen, utility_gen_year)
 }
 
+# Pull out utilities reporting solar power
 solar_gen <- utility_gen %>% 
   filter(`Reported Fuel Type Code` == "SUN") %>%
   select(c(`Plant Id`, `Plant Name`, `Operator Name`, `Operator Id`, State, YEAR, starts_with("Netgen_")))
 
+# Pivot table to generate multi-year time series
 solar_gen <- solar_gen %>% 
   pivot_longer(cols = c(starts_with("Netgen_")), names_to = c("Type", "Month"), names_sep = "_", values_to = "MWh") %>%
   mutate(Date = parse_date_time(paste(Month, YEAR, sep=" "), orders = "bY"),
          MWh = as.numeric(MWh))
 
+# California is way ahead of everyone else
 solar_gen %>% 
   group_by(Date, State) %>%
   summarize(kMWh = sum(MWh, na.rm=TRUE)/1000) %>%
   ggplot() +
   geom_line(aes(x = Date, y = kMWh, group = State, color = State))
 
+# Even taking out CA, it's difficult to see the trends because of the large seasonal pattern
 solar_gen %>% 
   filter(State != "CA") %>%
   group_by(Date, State) %>%
@@ -152,16 +161,20 @@ solar_gen %>%
   ggplot() +
   geom_line(aes(x = Date, y = statekMWh, group = State, color = State))
 
+# There's not enough data from DC to do a trend analysis so pull that out
 solar_summary <- solar_gen %>% filter(State != "DC") %>% group_by(Date, State) %>%
   summarize(kMWh = sum(MWh, na.rm=TRUE)/1000)
 
+# Time series decomposition for North Carolina
 state <- solar_gen %>% filter(State == "NC") %>% group_by(Date) %>% summarize(kMWh = sum(MWh, na.rm = TRUE)/1000)
 state_ts <- ts(state$kMWh, frequency=12)
 f <- decompose(state_ts)
 plot(f)
 
+# List of states with solar time series data
 statelist <- solar_summary %>% ungroup() %>% distinct(State) %>% select(State)
 
+# For each state, generate a time series decomposition and return de-seasoned trend
 state_trend <- function(x, statesolar) {
   state_data <- statesolar[statesolar$State == x,]
   start_time = c(year(state_data$Date[1]),month(state_data$Date[1]))
@@ -170,27 +183,28 @@ state_trend <- function(x, statesolar) {
   return(f$trend)
 }
 
+# Calculate state-level trends and join into a single data frame
 trendlist <- lapply(statelist$State, state_trend, solar_summary)
 solartrends <- do.call("ts.union", trendlist)
 st <- as.xts(solartrends)
 solartrendsdf <- as.data.frame(st)
+
+# Fix column names and datetimes
 colnames(solartrendsdf) = statelist$State
 solartrendsdf$Date <- parse_date_time(rownames(solartrendsdf), orders = "bY")
+
+# Pivot table to long format
 solartrendsdf <- solartrendsdf %>% 
   pivot_longer(cols = 1:length(solartrendsdf)-1, names_to="State", values_to="kMWh")
 
+# Save a tidy version of this data
 write.csv(solartrendsdf, 'solar_trends.csv')
 
+# A few states seem particularly interesting here, so let's highlight those in the graph
 solartrendsdf <- solartrendsdf %>%
   mutate(Highlight = ifelse(State == "CA" | State == "NC" | State == "TX" | State == "NV" | State == "FL", State, NA))
 
-ggplot(data = solartrendsdf) + 
-  geom_line(aes(Date, kMWh, group = State, color = Highlight, size = !is.na(Highlight), alpha = !is.na(Highlight))) +
-  geom_text(data = solartrendsdf %>% filter(!is.na(kMWh)) %>% filter(Date == last(Date), !is.na(Highlight)), aes(label = State, x = Date + 1e7, y = kMWh, color = State), size=4) + 
-  guides(color = FALSE) +
-  scale_size_manual(values=c(0.5, 1.5), guide = 'none') +
-  scale_alpha_manual(values=c(0.5, 1), guide = 'none')
-
+# State trends, highlighting intriguing patterns in a handful of states
 ggplot(data = solartrendsdf) + 
   geom_line(aes(Date, kMWh, group = State, color = Highlight, size = !is.na(Highlight), alpha = !is.na(Highlight))) +
   geom_label_repel(data = solartrendsdf %>% filter(!is.na(kMWh)) %>% filter(Date == last(Date), !is.na(Highlight)), aes(Date, kMWh, label = Highlight), nudge_x = 1e7, na.rm = TRUE) + 
@@ -198,10 +212,7 @@ ggplot(data = solartrendsdf) +
   scale_alpha_manual(values=c(0.5, 1), guide = 'none') + 
   guides(color = FALSE)
 
-
-
 # What about by small-scale producers?
-
 fps <- list.files(path = "SmallScaleSolar", pattern = "small_scale", recursive = FALSE, full.names = TRUE)
 ssgen <- read_excel(fps[1], sheet = 3, skip = 2, na = c("NM","."))
 for (fp in tail(fps,length(fps)-1)) {
