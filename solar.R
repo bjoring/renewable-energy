@@ -89,7 +89,7 @@ solar19 %>% ggplot() +
   geom_point(aes(x = `Nameplate Capacity (MW)`, y = `Summer Capacity (MW)`))
 
 usa <- map_data("usa")
-states <- map_data("states")
+states <- map_data("state")
 ggplot() + 
   geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = "white") +
   geom_point(data = solar19loc, aes(Longitude, Latitude, size = `Nameplate Capacity (MW)`), alpha = 0.1) +
@@ -110,7 +110,6 @@ ggplot() +
   coord_fixed(1.3) +
   scale_x_continuous(limits=c(-130, -60)) +
   scale_y_continuous(limits = c(20, 50))
-solar19loc <- left_join(solar19, plant19, by="Plant Code")
 
 # How much solar energy is actually being generated?
 
@@ -178,7 +177,11 @@ solartrendsdf <- as.data.frame(st)
 colnames(solartrendsdf) = statelist$State
 solartrendsdf$Date <- parse_date_time(rownames(solartrendsdf), orders = "bY")
 solartrendsdf <- solartrendsdf %>% 
-  pivot_longer(cols = 1:length(solartrendsdf)-1, names_to="State", values_to="kMWh") %>%
+  pivot_longer(cols = 1:length(solartrendsdf)-1, names_to="State", values_to="kMWh")
+
+write.csv(solartrendsdf, 'solar_trends.csv')
+
+solartrendsdf <- solartrendsdf %>%
   mutate(Highlight = ifelse(State == "CA" | State == "NC" | State == "TX" | State == "NV" | State == "FL", State, NA))
 
 ggplot(data = solartrendsdf) + 
@@ -187,7 +190,6 @@ ggplot(data = solartrendsdf) +
   guides(color = FALSE) +
   scale_size_manual(values=c(0.5, 1.5), guide = 'none') +
   scale_alpha_manual(values=c(0.5, 1), guide = 'none')
-  
 
 ggplot(data = solartrendsdf) + 
   geom_line(aes(Date, kMWh, group = State, color = Highlight, size = !is.na(Highlight), alpha = !is.na(Highlight))) +
