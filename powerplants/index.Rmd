@@ -5,14 +5,14 @@ output: html_notebook
 
 Description of plot 
 
-```{r warning = FALSE, fig.width = 12, fig.height = 6}
+```{r results = FALSE, warning = FALSE, fig.width = 12, fig.height = 6}
 library(tidyverse)
 library(ggmap)
 library(maps)
 library(mapdata)
 
-wind19loc <- read.csv("wind_locations_2019.csv")
-solar19loc <- read.csv("solar_locations_2019.csv")
+wind19loc <- read.csv("../wind_locations_2019.csv")
+solar19loc <- read.csv("../solar_locations_2019.csv")
 states <- map_data("state")
 
 ggplot() + 
@@ -26,6 +26,5 @@ ggplot() +
   ylab("Latitude") +
   labs(size = "Capacity (MW)") +
   ggtitle("Distribution of wind (gray) and solar (gold) power plants in the contiguous United States")
-
 
 ```
