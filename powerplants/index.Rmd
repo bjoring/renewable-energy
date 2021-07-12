@@ -5,7 +5,7 @@ output: html_notebook
 
 Description of plot 
 
-```{r results = FALSE, warning = FALSE, fig.width = 20, fig.height = 10}
+```{r results = FALSE, warning = FALSE, fig.width = 16, fig.height = 8}
 library(tidyverse)
 library(ggmap)
 library(maps)
