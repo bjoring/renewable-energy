@@ -10,23 +10,94 @@ library(tidyverse)
 library(ggmap)
 library(maps)
 library(mapdata)
+library(ggthemes)
 
 wind19loc <- read.csv("../wind_locations_2019.csv")
 solar19loc <- read.csv("../solar_locations_2019.csv")
+
 states <- map_data("state")
 
-ggplot() + 
+solarwindmap <- ggplot() + 
   geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = "white") +
   geom_point(data = solar19loc, aes(Longitude, Latitude, size = Nameplate.Capacity..MW.), alpha = 0.1, color = "gold") +
   geom_point(data = wind19loc, aes(Longitude, Latitude, size = Nameplate.Capacity..MW.), alpha = 0.1, color = "gray") +
-  coord_fixed(1.3) +
-  scale_x_continuous(limits=c(-130, -60)) +
-  scale_y_continuous(limits = c(20, 50)) +
-  xlab("Longitude") +
-  ylab("Latitude") +
-  labs(size = "Capacity (MW)") +
-  ggtitle("Distribution of wind (gray) and solar (gold) power plants in the contiguous United States")
+  coord_fixed(1.4) +
+  scale_x_continuous(limits=c(-125, -65)) +
+  scale_y_continuous(limits = c(25, 50)) +
+  labs(size = "Generator capacity (MW)") +
+  ggtitle("Distribution of wind (gray) and solar (gold) power plants in the contiguous United States") +
+  theme_map() +
+  theme(legend.position = "bottom",
+        legend.key = element_rect(fill = "gray95"),
+        plot.title = element_text(size = 14, face = "bold"))
+
+solarwindmap
 
 ```
 
 The map shows clear regional differences in clean energy types, with only a few cities in California showing significant investment in both types of energy. Correlation of these data with wind pattern data may explain some of the differences, especially through the center of the country, but stark differences between contiguous states, such as Minnesota/Iowa, Virginia/North Carolina, and Massachusetts/Connecticut suggest the impact of local policy initiatives on clean energy investment.
+
+```{r results = FALSE, warning = FALSE, fig.width = 12, fig.height = 6}
+usa_wind_df <- read.csv("../usa_wind_df.csv")
+
+wind_corr <- ggplot() +
+  geom_tile(data=usa_wind_df, aes(x = x, y = y, fill = value)) +
+  geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = NA) +
+  geom_point(data = wind19loc, aes(Longitude, Latitude, size = Nameplate.Capacity..MW.), alpha = 0.2, stroke = 0, shape = 16, color = "white") +
+  scale_fill_viridis(na.value="white") +
+  coord_fixed(1.4) +
+  scale_x_continuous(limits=c(-125, -65)) +
+  scale_y_continuous(limits = c(25, 50)) +
+  theme_map() +
+  theme(legend.position="bottom",
+        legend.key = element_rect(fill = "gray80"),
+        plot.title = element_text(size = 14, face = "bold")) +
+  ggtitle("Average annual windspeed and distribution of wind-powered generators") +
+  labs(fill = "Wind speed (m/s)", size = "Generator capacity (MW)")
+
+wind_corr
+```
+
+```{r results = FALSE, warning = FALSE, fig.width = 12, fig.height = 6}
+usa_solar_df <- read.csv("../usa_solar_df.csv")
+
+solar_corr <- ggplot() +
+  geom_tile(data=usa_solar_df, aes(x = x, y = y, fill = value)) +
+  geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = NA) +
+  geom_point(data = solar19loc, aes(Longitude, Latitude, size = Nameplate.Capacity..MW.), alpha = 0.2, stroke = 0, shape = 16, color = "white") +
+  scale_fill_viridis(na.value="white") +
+  coord_fixed(1.4) +
+  scale_x_continuous(limits=c(-125, -65)) +
+  scale_y_continuous(limits = c(25, 50)) +
+  theme_map() +
+  theme(legend.position="bottom",
+        legend.key = element_rect(fill = "gray80"),
+        plot.title = element_text(size = 14, face = "bold")) +
+  ggtitle("Annual solar direct normal irradiance (DNI) and distribution of solar-powered generators") +
+  labs(fill = "DNI (kWh/m^2/day)", size = "Generator capacity (MW)")
+
+solar_corr
+
+```
+
+```{r results = FALSE, warning = FALSE, fig.width = 12, fig.height = 6}
+dsire_solar_summary <- read.csv("../DSIRE_solar_summar.csv")
+
+solarpolicy <- ggplot() + 
+  geom_polygon(data = state_solar, aes(long, lat, group = group, fill = n), color = "black") +
+  geom_point(data = solar19loc, aes(Longitude, Latitude, size = Nameplate.Capacity..MW.), alpha = 0.2, stroke = 0, shape = 16, color = "white") +
+  coord_fixed(1.4) +
+  scale_x_continuous(limits=c(-125, -65)) +
+  scale_y_continuous(limits = c(25, 50)) +
+  labs(fill = "Number of state-wide solar policy initiatives",
+       size = "Generator capacity (MW)") +
+  ggtitle("Effect of state policy on solar power capacity") +
+  theme_map() +
+  theme(legend.position = "bottom",
+        legend.key = element_rect(fill = "gray80"),
+        plot.title = element_text(size = 14, face = "bold"))
+
+solarpolicy
+
+```
+
