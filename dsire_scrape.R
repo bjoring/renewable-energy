@@ -29,7 +29,8 @@ dsire_solar_df <- dsire_solar_df %>%
   mutate(startDate = parse_date_time(startDate, orders = "Ymd"),
          endDate = parse_date_time(endDate, orders = "Ymd"),
          createdTs = parse_date_time(createdTs, orders = "mdY"),
-         updatedTs = parse_date_time(updatedTs, orders = "mdY"))
+         updatedTs = parse_date_time(updatedTs, orders = "mdY"),
+         startImp = as.POSIXct(ifelse(!is.na(startDate), startDate, createdTs), origin = "1970-01-01 UTC"))
 
 #Scrape all wind records
 dsire_wind_api <- paste0("https://programs.dsireusa.org/api/v1/programs?technologycategory[]=3&limit=",dsire_total)
