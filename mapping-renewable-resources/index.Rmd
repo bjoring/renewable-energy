@@ -1,0 +1,195 @@
+---
+title: "Mapping renewable resources and power generation"
+output: html_notebook
+---
+
+The EIA maintains detailed data on power generation from power plant reporting, including wind- and solar-powered electricity generation. These data are available <a href="https://www.eia.gov/electricity/data/eia860/">here</a> by year. We'll load in some packages and then grab the data from 2019 to start looking at current energy trends.
+
+```{r warning=FALSE}
+library(tidyverse)
+library(curl)
+library(readxl)
+library(maps)
+```
+
+
+```{r}
+EIA860query <- "https://www.eia.gov/electricity/data/eia860/archive/xls/eia8602019.zip"
+EIA860fp <- "./EIA860_2019.zip"
+
+curl_download(EIA860query, EIA860fp, quiet=TRUE)
+dir.create("./EIA860_2019")
+unzip(EIA860fp, exdir = "./EIA860_2019")
+```
+
+
+These files come in `.XLSX` form, so we'll use the tidyverse package readxl to read the data into R. Our primary interest is the generators contained in `3_2_Wind_Y2019.XLSX` and `3_3_Solar_Y2019.XLSX`, but `2__Plant_Y2019.XLSX` has the information we need to localize position of the generators in terms of latitude and longitude. We can join the plant-level data to the generator-level data using the `Plant Code` column.
+
+```{r}
+wind19 <- read_excel("./EIA860_2019/3_2_Wind_Y2019.xlsx", skip = 1)
+solar19 <- read_excel("./EIA860_2019/3_3_Solar_Y2019.xlsx", skip = 1)
+plant19 <- read_excel("./EIA860_2019/2___Plant_Y2019.xlsx", skip = 1)
+
+wind19loc <- left_join(wind19, plant19, by="Plant Code")
+solar19loc <- left_join(solar19, plant19, by="Plant Code")
+```
+
+
+The wind and solar data files have a ton of detailed information on the generators. If you're following along with this tutorial, spend a little time exploring the data and understanding the relationships between the variables. For now, lets look at the location of wind and solar power generators in the contiguous US. We could just plot the points using latitude and longitude, but it would be more helpful to plot them on top of a map of the US so we can see what areas of the country are using these technologies. For that, we'll use `map_data` from `ggplot2` to get the outlines of the states. We can plot the states with `geom_polygon` and the plants with `geom_point`. Make sure to include `group=group` in the aesthetics for `geom_polygon` or you'll get strange lines crisscrossing the country.
+
+```{r warning=FALSE}
+states <- map_data("state")
+colors <- c("wind" = "blue", "solar" = "gold")
+
+ggplot() + 
+  geom_polygon(data = states, aes(long, lat, group=group), color = "black", fill = "white") +
+  geom_point(data = solar19loc, aes(Longitude, Latitude, color="solar"), alpha = 0.1) +
+  geom_point(data = wind19loc, aes(Longitude, Latitude, color="wind"), alpha= 0.1) +
+  coord_fixed(1.3) +
+  scale_x_continuous(limits=c(-125, -65)) +
+  scale_y_continuous(limits=c(25, 50)) +
+  labs(x = "Longitude", y = "Latitude", color = "Power source") +
+  scale_color_manual(values = colors)
+```
+There are some interesting trends here. Wind-generated power seems to be concentrated in the middle of the country, while solar power seems more coastal. It could have to do with the distribution of wind and solar resources, so let's add that information to our analysis. The National Renewable Energy Laboratory in Colorado provides detailed spatial grids of both solar and wind energy across the US. There are lots of options to choose from, but for now, we'll use the annual average Direct Normal Irradiance (DNI) and the annual average wind speed at 100m above surface level (see <a href="https://www.nrel.gov/gis/solar-resource-maps.html">here</a> and <a href="https://www.nrel.gov/gis/wind-resource-maps.html">here</a> for more information or from the citations below). Note that these raster files are quite large. We will also load in some packages specifically designed to handle this type of geospatial data.
+
+```{r eval=FALSE}
+# Sengupta, M., Xie, Y., Lopez, A., Habte, A., Maclaurin, G., & Shelby, J. (2018). 
+# The national solar radiation data base (NSRDB). Renewable and Sustainable Energy Reviews, 89, 51-60.
+
+# Draxl, C., B.M. Hodge, A. Clifton, and J. McCaa. 2015. 
+# Overview and Meteorological Validation of the Wind Integration National 
+# Dataset Toolkit (Technical Report, NREL/TP-5000-61740). Golden, CO: National Renewable Energy Laboratory.
+
+# Draxl, C., B.M. Hodge, A. Clifton, and J. McCaa. 2015. 
+# "The Wind Integration National Dataset (WIND) Toolkit." Applied Energy 151: 355366.
+
+# Lieberman-Cribbin, W., C. Draxl, and A. Clifton. 2014. 
+# Guide to Using the WIND Toolkit Validation Code (Technical Report, NREL/TP-5000-62595). 
+# Golden, CO: National Renewable Energy Laboratory.
+
+# King, J., A. Clifton, and B.M. Hodge. 2014. 
+# Validation of Power Output for the WIND Toolkit (Technical Report, NREL/TP-5D00-61714). 
+# Golden, CO: National Renewable Energy Laboratory.
+
+dni_url = "https://www.nrel.gov/gis/assets/data/nsrdbv3_dni.zip"
+curl_download(dni_url, "DNI.zip", quiet=TRUE)
+dir.create("./DNI")
+unzip("DNI.zip", exdir = "./DNI")
+
+wind_url = "https://www.nrel.gov/gis/assets/images/us-wind-data.zip"
+curl_download(wind_url, "windspeed.zip", quiet=TRUE)
+dir.create("./windspeed")
+unzip("windspeed.zip", exdir = "./windspeed")
+```
+
+Let's start by reading the DNI raster and converting it into a dataframe that `ggplot2` can work with.
+
+```{r warning=FALSE}
+library(raster)
+library(viridis)
+library(maptools)
+library(sp)
+library(ggthemes)
+
+dni <- raster("DNI/nsrdbv3_dni/Annual DNI/nsrdb3_dni.tif")
+dni_df <- as.data.frame(dni, xy = TRUE)
+
+ggplot() +
+  geom_raster(data = dni_df , aes(x = x, y = y, fill = nsrdb3_dni)) +
+  scale_fill_viridis_c() +
+  coord_quickmap()
+```
+That's a good looking map! But for this analysis, we're only interested in the contiguous US, so we'll need to apply a mask to the raster to set the values of everything outside the US to `NA`. The `raster` package provides a very easy to use function `mask`, and we can get the shape of the US from `maps::map`. That will give us the shape of the US which we can convert to a Spatial Polygon (the format required by `mask`). To do this conversion, we need to provide the appropriate `proj4` projection for our map. Fortunately, in this case, the projection is easy: the map was provided to us with latitude and longitude, just like our generator locations.
+
+```{r}
+usa <- map("state", fill=TRUE, plot=FALSE)
+IDs <- sapply(strsplit(usa$names, ":"), function(x) x[1])
+usa <- map2SpatialPolygons(usa, IDs=IDs, proj4string=CRS("+proj=longlat +datum=WGS84"))
+usaraster <- mask(dni, usa)
+
+usaraster_df <- as(usaraster, "SpatialPixelsDataFrame")
+usaraster_df <- as.data.frame(usaraster_df)
+colnames(usaraster_df) <- c("value","x","y")
+
+```
+
+```{r}
+ggplot() +
+  geom_raster(data = usaraster_df, aes(x = x, y = y, fill = value)) +
+  scale_fill_viridis_c() +
+  coord_quickmap()
+```
+That's more like it! Now we can add in our previous geoms of state lines and solar power generators to get the final map.
+
+```{r warning=FALSE}
+ggplot() +
+  geom_tile(data=usaraster_df, aes(x = x, y = y, fill = value)) +
+  geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = NA) +
+  geom_point(data = solar19loc, aes(Longitude, Latitude), alpha = 0.2, stroke = 0, shape = 16, color = "white") +
+  scale_fill_viridis(na.value="white") +
+  coord_fixed(1.3) +
+  scale_x_continuous(limits=c(-125, -65)) +
+  scale_y_continuous(limits = c(25, 50)) +
+  theme_map() +
+  theme(legend.position="bottom",
+        legend.key = element_rect(fill = "gray"),
+        plot.title = element_text(size = 14, face = "bold")) +
+  ggtitle("Average annual DNI and distribution of solar-powered generators") +
+  labs(fill = "DNI")
+```
+California seems to be taking advantage of high annual DNI, but many of the hotspots of solar power generation aren't in the areas of peak DNI. In fact, they seem to follow state boundaries more closely than the availability of solar radiation, suggesting state-level policy may play an important role in the construction of solar-powered generators.
+
+But what about wind?
+
+The process should be very similar, but not all rasters follow a consistent format. When we try to read in the windspeed data, R gives us the helpful hint that our data seems to be flipped along the y axis!
+
+```{r}
+windspeed <- raster("windspeed/wtk_conus_100m_mean_masked.tif")
+windspeed_df <- as.data.frame(windspeed, xy = TRUE)
+```
+Fortunately, their recommendation of `flip` fixes that problem.
+
+```{r warning=FALSE}
+wind <- flip(raster("windspeed/wtk_conus_100m_mean_masked.tif"), direction = 'y')
+wind_df <- as.data.frame(wind, xy = TRUE)
+
+ggplot() +
+  geom_raster(data = wind_df , aes(x = x, y = y, fill = wtk_conus_100m_mean_masked)) +
+  scale_fill_viridis_c() +
+  coord_quickmap()
+```
+But now, take a look at the x- and y-axes. Those numbers don't seem like the latitudes and longitudes that we were using before, and the upper edge of the US isn't straight across like it was in the previous plot. These data were provided in a Lambert Conformal Conic projection! A full discussion of projections is beyond the scope of this tutorial, but it is good to know that the `raster` package provides a `projectRaster` function that allows us to convert between projections. That means we can turn this into the lat/long projection we've been using. In this case, the coordinate reference system (crs) command `"+init=espg:4326"` is asking for a projection into the same WGS84 latitude/longitude system we were using previously.
+
+```{r}
+wind_latlong <- projectRaster(wind, crs="+init=epsg:4326")
+
+usawind <- mask(wind_latlong, usa)
+usawind_df <- as(usawind, "SpatialPixelsDataFrame")
+usawind_df <- as.data.frame(usawind_df)
+colnames(usawind_df) <- c("value","x","y")
+
+ggplot() +
+  geom_raster(data = usawind_df, aes(x = x, y = y, fill = value)) +
+  scale_fill_viridis_c() +
+  coord_quickmap()
+```
+Now we can finish up our analysis of wind patterns and wind turbines.
+
+```{r warning=FALSE}
+ggplot() +
+  geom_tile(data=usawind_df, aes(x = x, y = y, fill = value)) +
+  geom_polygon(data = states, aes(long, lat, group = group), color = "black", fill = NA) +
+  geom_point(data = wind19loc, aes(Longitude, Latitude), alpha = 0.2, stroke = 0, shape = 16, color = "white") +
+  scale_fill_viridis(na.value="white") +
+  coord_fixed(1.4) +
+  scale_x_continuous(limits=c(-125, -65)) +
+  scale_y_continuous(limits = c(25, 50)) +
+  theme_map() +
+  theme(legend.position="bottom",
+        legend.key = element_rect(fill = "gray"),
+        plot.title = element_text(size = 14, face = "bold")) +
+  ggtitle("Average annual windspeed and distribution of wind generators") +
+  labs(fill = "Wind speed (m/s)")
+```
+Here we see a much different pattern than solar power. Wind-powered generation seems to cluster specifically in areas with relatively high windspeeds and does not seem confined to state boundaries, suggesting that wind power is driven primarily by the availability of the wind resource and not state-level policy.
